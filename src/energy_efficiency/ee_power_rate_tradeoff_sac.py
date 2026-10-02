@@ -20,23 +20,6 @@ import matplotlib.pyplot as plt
 from src.config.config import Config
 from src.config.config_plotting import PlotConfig
 
-"""
-Power-vs-rate trade-off, learned policy vs RM, in the dual-axis layout used by
-Ha et al. (Fig. 6): transmit power on the LEFT axis, sum rate on the RIGHT
-axis, one bar group per method. It shows both quantities at once --
-
-  - RM (full power): transmits the full 75 W budget for its rate,
-  - learned (proposed): transmits far less power while keeping most of the
-    rate,
-
-so the figure reads directly as "the learned policy saved this much power and
-gave up this much rate relative to full-power RM". Both operating points come
-straight from the cached rate_power_triplet.gzip ('sac_aod0.0' = learned,
-'sac_aod0.0_fullpower' = RM) -- no new simulation.
-
-Saves reports/figures/{pdf,jpg,png}/ee_power_rate_tradeoff_sac_error{X}.*
-"""
-
 CSIT_ERROR_BOUND = float(sys.argv[sys.argv.index('--error') + 1]) if '--error' in sys.argv else 0.0
 
 def total_power_watt(cfg, transmit_power_watt):
