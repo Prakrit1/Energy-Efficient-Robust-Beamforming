@@ -1,18 +1,14 @@
 # Energy-Efficient Robust Beamforming
 
-This code was used in the following unpublished work (preprint not available yet).
 
-[1] Alea Schröder, Steffen Gracla, Carsten Bockelmann, Dirk Wübben, Armin Dekorsy, "Model-free Robust Beamforming in Satellite Downlink using Reinforcement Learning", under review.
 
-Email: {schroeder, gracla, bockelmann, wuebben, dekorsy}@ant.uni-bremen.de
-
-The code version associated with this paper along with the used learned models and evaluation results is found in the releases. The project structure is as follows
+The code version associated with this paper is found in the releases. The project structure is as follows
 
 ```
 .
 ├── models                  | trained models (download from Releases)
 ├── outputs
-│   └── metrics             | metrics from training / evaluation
+│   └── metrics             | metrics from training/evaluation
 ├── README.md               | this file
 ├── requirements.txt        | project dependencies
 ├── environment.yml         | conda environment (GPU)
