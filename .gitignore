@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+# leading slash = top-level only, so src/models/ and src/outputs/ are NOT ignored
+/models/
+/outputs/
+/reports/figures/
+*.gzip
+.venv/
+.idea/
+.vscode/
+.DS_Store
