@@ -1,0 +1,206 @@
+"""
+Base rate-vs-error-bound plotting code, shared across EE scenario scripts
+(analogous to plot_beam_patterns.py for beampatterns): reads an already-
+computed error-sweep results dict (produced by a scenario script such as
+plotting_scenario.py) and draws one rate-vs-error figure from an explicit
+list of curves.
+
+Scenario-agnostic: the caller decides exactly which result keys to draw,
+in what order, with what label/color/marker/linestyle -- this file has no
+hardcoded assumption about which combination of MMSE/SAC curves belongs on
+a given figure.
+"""
+import shutil
+from pathlib import Path
+
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+matplotlib.rcParams['text.usetex'] = False
+import matplotlib.pyplot as plt
+
+from src.config.config_plotting import PlotConfig
+
+def plot_rate_error_sweep(
+        error_sweep_range,
+        results: dict,
+        curves: list,
+        width,
+        height,
+        plots_parent_path,
+        name: str,
+        annotate_power: bool = False,
+        legend_ncols: int = 1,
+        legend_loc: str = 'upper right',
+        legend_bbox_to_anchor=None,
+        legend_fontsize: int = 11,
+        legend_labelspacing: float = 0.3,
+        legend_handlelength: float = 1.6,
+        power_curves: list = None,
+        power_ylabel: str = 'Transmit power [W]',
+        power_ylim=None,
+) -> None:
+    """
+    curves: list of dicts, each describing one line on the figure:
+        {
+            'result_key': key into `results` (e.g. 'sac_aod0.0', 'mmse_matched_aod0.0'),
+            'label': legend label,
+            'color': matplotlib color,
+            'marker': marker style (default 'o'),
+            'linestyle': line style (default '-'),
+        }
+
+    annotate_power: if True, label each curve at its error=0 point with its
+    measured power (W and % of budget), reading 'mean_power'/'power_budget'
+    from that curve's results entry -- opt-in since not every figure using
+    this function wants it (e.g. the MMSE/SAC full-vs-matched-power figure
+    already encodes power in which curves are drawn, not via annotation).
+
+    legend_ncols: number of legend columns (default 1); use 2 for a compact
+    box when curve labels are short, matching the reference paper's Fig. 3 style.
+
+    legend_loc/legend_bbox_to_anchor: for figures with too many curves for
+    an in-axes legend to avoid covering the lines (e.g. the 6-curve
+    training-triplet figure), pass e.g. loc='upper center',
+    bbox_to_anchor=(0.5, -0.15) to place the legend below the axes instead
+    -- savefig's bbox_inches='tight' below already expands to include it.
+
+    legend_fontsize: shrink for figures with many/long curve labels.
+
+    power_curves: optional list of curve dicts drawn on a SECONDARY (right)
+    y-axis in transmit power [W], for showing e.g. how the EE policy chooses
+    to save power alongside the rate curves. Same dict shape as `curves`
+    (plots that result_key's 'mean_power'), plus a special {'flat_value': W,
+    ...} form for a constant horizontal reference line (e.g. the 75 W budget)
+    that reads no result_key. Legend entries from both axes are merged into
+    the single legend. Defaults to None -> no right axis, existing behaviour.
+
+    power_ylabel/power_ylim: label and (optional) y-limits for that right axis.
+
+    curve['markevery']: optional matplotlib markevery spec (e.g. (0, 2) or
+    (1, 2)), for when two curves' lines coincide almost exactly (e.g.
+    MMSE vs RM, both near full power) -- staggering which x-positions get
+    a marker keeps the markers visually distinguishable without altering
+    the (intentionally identical) line itself.
+
+    A curve dict of the form {'blank': True} plots nothing but contributes an
+    empty legend cell -- used to leave an intentional gap when arranging a
+    multi-column legend (matplotlib fills columns top-to-bottom, left-to-right).
+    """
+    matplotlib.rcParams['text.usetex'] = False
+
+    fig, ax = plt.subplots(figsize=(width, height))
+
+    for curve in curves:
+        if curve.get('blank'):
+
+            ax.plot([], [], linestyle='none', marker='none', label=' ')
+            continue
+        series = results[curve['result_key']]
+        marker_dx = curve.get('marker_dx', 0.0)
+        common = dict(color=curve['color'], linestyle=curve.get('linestyle', '-'), linewidth=1.5)
+        if marker_dx:
+            ax.plot(error_sweep_range, series['mean_rate'], marker='', label='_nolegend_', **common)
+            x_shift = np.asarray(error_sweep_range, dtype=float) + marker_dx
+            y_on_line = np.interp(x_shift, error_sweep_range, series['mean_rate'])
+            ax.plot(
+                x_shift, y_on_line,
+                marker=curve.get('marker', 'o'), markevery=curve.get('markevery', None),
+                linestyle='none', color=curve['color'], markersize=5, label='_nolegend_',
+            )
+            ax.plot([], [], marker=curve.get('marker', 'o'), markersize=5, label=curve['label'], **common)
+        else:
+            ax.plot(
+                error_sweep_range, series['mean_rate'],
+                marker=curve.get('marker', 'o'), markevery=curve.get('markevery', None),
+                markersize=5, label=curve['label'], **common,
+            )
+        if annotate_power and 'mean_power' in series and 'power_budget' in series:
+            power_watt = series['mean_power'][0]
+            power_pct = 100 * power_watt / series['power_budget']
+            ax.annotate(
+                f'{power_watt:.1f} W ({power_pct:.0f}%)',
+                xy=(error_sweep_range[0], series['mean_rate'][0]),
+                xytext=(6, 6), textcoords='offset points',
+                fontsize=7, color=curve['color'], fontweight='bold',
+            )
+
+    rate_handles, rate_labels = ax.get_legend_handles_labels()
+
+    power_handles = []
+    if power_curves:
+        ax2 = ax.twinx()
+        for pc in power_curves:
+            if 'flat_value' in pc:
+                handle = ax2.axhline(
+                    pc['flat_value'], color=pc['color'],
+                    linestyle=pc.get('linestyle', '--'), linewidth=1.5,
+                    label=pc['label'],
+                )
+            else:
+                series = results[pc['result_key']]
+                handle, = ax2.plot(
+                    error_sweep_range, series['mean_power'],
+                    color=pc['color'], marker=pc.get('marker', 'o'),
+                    markevery=pc.get('markevery', None),
+                    linestyle=pc.get('linestyle', '-'),
+                    linewidth=1.5, markersize=5, label=pc['label'],
+                )
+            power_handles.append(handle)
+        ax2.set_ylabel(power_ylabel, fontsize=13)
+        if power_ylim is not None:
+            ax2.set_ylim(power_ylim)
+
+    ax.set_xlabel(r'Error Bound ($\Delta\epsilon$)', fontsize=13)
+    ax.set_ylabel('Rate R [bps/Hz]', fontsize=13)
+    ax.grid(True, alpha=0.5, linewidth=0.7)
+    ax.set_axisbelow(True)
+    ax.legend(
+        rate_handles + power_handles,
+        rate_labels + [h.get_label() for h in power_handles],
+        loc=legend_loc,
+        bbox_to_anchor=legend_bbox_to_anchor,
+        ncols=legend_ncols,
+        fontsize=legend_fontsize,
+        framealpha=0.9,
+        frameon=True,
+        handlelength=legend_handlelength,
+        labelspacing=legend_labelspacing,
+        borderpad=0.3,
+        handletextpad=0.5,
+    )
+    plt.tight_layout(pad=0.2)
+
+    pdf_path = Path(plots_parent_path, 'pdf')
+    pdf_path.mkdir(parents=True, exist_ok=True)
+    out = Path(pdf_path, f'{name}.pdf')
+    plt.savefig(out, bbox_inches='tight', dpi=800, transparent=True)
+    print(f'Saved: {out}')
+
+    jpg_path = Path(plots_parent_path, 'jpg')
+    jpg_path.mkdir(parents=True, exist_ok=True)
+    out_jpg = Path(jpg_path, f'{name}.jpg')
+    plt.savefig(out_jpg, bbox_inches='tight', dpi=200)
+    print(f'Saved: {out_jpg}')
+
+    png_path = Path(plots_parent_path, 'png')
+    png_path.mkdir(parents=True, exist_ok=True)
+    out_png = Path(png_path, f'{name}.png')
+    plt.savefig(out_png, bbox_inches='tight', dpi=200, transparent=True)
+    print(f'Saved: {out_png}')
+
+    _texsystem = next((t for t in ('xelatex', 'lualatex', 'pdflatex') if shutil.which(t)), None)
+    if _texsystem is not None:
+        try:
+            pgf_path = Path(plots_parent_path, 'pgf')
+            pgf_path.mkdir(parents=True, exist_ok=True)
+            out_pgf = Path(pgf_path, f'{name}.pgf')
+            with matplotlib.rc_context({'pgf.texsystem': _texsystem, 'pgf.rcfonts': False}):
+                plt.savefig(out_pgf, bbox_inches='tight', backend='pgf')
+            print(f'Saved: {out_pgf}')
+        except Exception as exc:
+            print(f'PGF export skipped: {exc}')
+    else:
+        print('PGF export skipped: no LaTeX (xelatex/lualatex/pdflatex) on PATH')
+
+    plt.close(fig)
