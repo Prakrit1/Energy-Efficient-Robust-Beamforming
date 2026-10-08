@@ -1,4 +1,10 @@
-# Energy-Efficient Robust Beamforming
+This code was used in the following work.
+
+[1] Prakrit Parajuli, Alea Schröder, Dirk Wübben, Armin Dekorsy, "Energy-Efficient Robust Beamforming for LEO
+Satellite Downlink via Reinforcement Learning".
+
+Email: {parajuli, schroeder, wuebben, dekorsy}@ant.uni-bremen.de
+
 
 The code version associated with this paper is found in the releases. The project structure is as follows. Need to rerun the code to generate trained models and output figures.
 
